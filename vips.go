@@ -434,6 +434,34 @@ func vipsFlattenBackground(image *C.VipsImage, background Color) (*C.VipsImage, 
 	return image, nil
 }
 
+func vipsSRGB(image *C.VipsImage) (*C.VipsImage, error) {
+	var outImage *C.VipsImage
+
+	bands := int(C.vips_getbands_bridge(image))
+	fmt.Printf("in bands=%d", bands)
+	if bands < 3 {
+		interpretation := C.VipsInterpretation(InterpretationSRGB)
+		// Apply the proper colour space
+		if vipsColourspaceIsSupported(image) {
+			err := C.vips_colourspace_bridge(image, &outImage, interpretation)
+			if int(err) != 0 {
+				return nil, catchVipsError()
+			}
+			image = outImage
+		}
+	}
+	if bands == 3 {
+		err := C.vips_add_band(image, &outImage, 255)
+		if int(err) != 0 {
+			return nil, catchVipsError()
+		}
+		image = outImage
+	}
+	outbands := int(C.vips_getbands_bridge(image))
+	fmt.Printf("outbands=%d", outbands)
+	return image, nil
+}
+
 func vipsPreSave(image *C.VipsImage, o *vipsSaveOptions) (*C.VipsImage, error) {
 	var outImage *C.VipsImage
 	// Remove ICC profile metadata
@@ -864,6 +892,21 @@ func vipsContrast(image *C.VipsImage, contrast float64) (*C.VipsImage, error) {
 	defer C.g_object_unref(C.gpointer(image))
 
 	err := C.vips_contrast_bridge(image, &out, C.double(contrast))
+	if err != 0 {
+		return nil, catchVipsError()
+	}
+	return out, nil
+}
+
+func vipsAnimatedGifJoin(images []*C.VipsImage, pageHeight, nPages, delayMs, loop int) (*C.VipsImage, error) {
+	var out *C.VipsImage
+	defer func() {
+		for _, image := range images {
+			C.g_object_unref(C.gpointer(image))
+		}
+	}()
+
+	err := C.vips_animated_gif_bridge1(&images[0], &out, C.int(pageHeight), C.int(nPages), C.int(delayMs), C.int(loop))
 	if err != 0 {
 		return nil, catchVipsError()
 	}

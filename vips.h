@@ -310,6 +310,11 @@ vips_colourspace_bridge(VipsImage *in, VipsImage **out, VipsInterpretation space
 }
 
 int
+vips_getbands_bridge(VipsImage *in) {
+    return in->Bands;
+}
+
+int
 vips_icc_transform_bridge (VipsImage *in, VipsImage **out, const char *output_icc_profile) {
 	// `output_icc_profile` represents the absolute path to the output ICC profile file
 	return vips_icc_transform(in, out, output_icc_profile, "embedded", TRUE, NULL);
@@ -426,8 +431,10 @@ vips_heifsave_bridge(VipsImage *in, void **buf, size_t *len, int strip, int qual
 int
 vips_gifsave_bridge(VipsImage *in, void **buf, size_t *len, int strip) {
 #if (VIPS_MAJOR_VERSION > 8 || (VIPS_MAJOR_VERSION == 8 && VIPS_MINOR_VERSION >= 12))
-	return vips_gifsave_buffer(in, buf, len, 
-		"strip", INT_TO_GBOOLEAN(strip),
+	return vips_gifsave_buffer(in, buf, len,
+		"reuse", TRUE,
+		"interframe_maxerror", 32,
+		"interpalette_maxerror", 16,
 		NULL
 	);
 #else
@@ -694,4 +701,69 @@ int vips_brightness_bridge(VipsImage *in, VipsImage **out, double k)
 int vips_contrast_bridge(VipsImage *in, VipsImage **out, double k)
 {
     return vips_linear1(in, out, k , 0.0, NULL);
+}
+
+int vips_animated_gif_bridge(VipsImage **page, VipsImage **out, int page_height, int n_pages, int delay_ms, int loop)
+{
+    printf("page_height:%d, n_pages:%d, delay_ms:%d\n", page_height, n_pages, delay_ms);
+    if ( vips_arrayjoin(page, out, n_pages, "across", 1, NULL) ) {
+        return 1;
+    }
+
+    int *delay = VIPS_ARRAY( NULL, n_pages, int );
+    for( int i = 0; i < n_pages; i++ ) {
+        delay[i] = delay_ms;
+    }
+
+    vips_image_set_int( *out, "page-height", page_height );
+    vips_image_set_array_int( *out, "delay", delay, n_pages );
+    vips_image_set_int(*out, "loop", loop);
+
+    VIPS_FREE( delay );
+
+    return 0;
+}
+
+int vips_animated_gif_bridge1(VipsImage **page, VipsImage **out, int page_height, int n_pages, int delay_ms, int loop)
+{
+    printf("page_height:%d, n_pages:%d, delay_ms:%d\n", page_height, n_pages, delay_ms);
+
+    VipsObject *base = VIPS_OBJECT(vips_image_new());
+	VipsImage **overlay = (VipsImage **) vips_object_local_array( base, n_pages );
+	VipsImage **annotated = (VipsImage **) vips_object_local_array( base, n_pages );
+    VipsImage **copy = (VipsImage **) vips_object_local_array(base, 1);
+
+	double transparent[] = { 0, 0, 0, 0 };
+
+	if(!(overlay[0] = vips_image_new_from_image( page[0], transparent, VIPS_NUMBER( transparent ) )) ||
+		vips_draw_rect( overlay[0], transparent, VIPS_NUMBER( transparent ), 0, 0, overlay[0]->Xsize , overlay[0]->Ysize, "fill", TRUE, NULL )) {
+		g_object_unref(base);
+		return( -1 );
+	}
+
+	for( int i = 0; i < n_pages; i++ ) {
+		if( vips_composite2( page[i], overlay[0], &annotated[i], VIPS_BLEND_MODE_OVER, NULL ) ) {
+			g_object_unref(base);
+			return( -1 );
+		}
+	}
+
+    if ( vips_arrayjoin(annotated, &copy[0], n_pages, "across", 1, NULL) || vips_copy(copy[0], out, NULL) ) {
+		g_object_unref(base);
+        return 1;
+    }
+
+    int *delay = VIPS_ARRAY( NULL, n_pages, int );
+    for( int i = 0; i < n_pages; i++ ) {
+        delay[i] = delay_ms;
+    }
+
+    vips_image_set_int( *out, "page-height", page_height );
+    vips_image_set_array_int( *out, "delay", delay, n_pages );
+    vips_image_set_int(*out, "loop", loop);
+
+    VIPS_FREE( delay );
+	g_object_unref(base);
+
+    return 0;
 }

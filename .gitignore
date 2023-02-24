@@ -7,3 +7,4 @@ bin
 /testdata/*_out.*
 /.idea/
 testdata/test_vertical_*.jpg
+.DS_Store

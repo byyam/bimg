@@ -7,21 +7,27 @@ import (
 	"image"
 	"image/jpeg"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"testing"
 )
 
+const (
+	ConvertNum     = 100
+	ConvertQuality = 50
+)
+
 func TestResize(t *testing.T) {
 	options := Options{Width: 800, Height: 600}
-	buf, _ := Read("testdata/test.jpg")
+	buf, _ := Read("testdata/test.heic")
 
 	newImg, err := Resize(buf, options)
 	if err != nil {
 		t.Errorf("Resize(imgData, %#v) error: %#v", options, err)
 	}
 
-	if DetermineImageType(newImg) != JPEG {
+	if DetermineImageType(newImg) != HEIF {
 		t.Fatal("Image is not jpeg")
 	}
 
@@ -30,7 +36,7 @@ func TestResize(t *testing.T) {
 		t.Fatalf("Invalid image size: %dx%d", size.Width, size.Height)
 	}
 
-	Write("testdata/test_out.jpg", newImg)
+	Write("testdata/test_out.heif", newImg)
 }
 
 func TestResizeVerticalImage(t *testing.T) {
@@ -668,6 +674,14 @@ func runBenchmarkResize(file string, o Options, b *testing.B) {
 	}
 }
 
+func doResize(file string, o Options, x int) {
+	buf, _ := Read(path.Join("testdata", file))
+	for n := 0; n < x; n++ {
+		log.Print("n=", n)
+		Resize(buf, o)
+	}
+}
+
 func BenchmarkRotateJpeg(b *testing.B) {
 	options := Options{Rotate: 180}
 	runBenchmarkResize("test.jpg", options, b)
@@ -708,8 +722,33 @@ func BenchmarkConvertToPng(b *testing.B) {
 }
 
 func BenchmarkConvertToWebp(b *testing.B) {
-	options := Options{Type: WEBP}
+	options := Options{Type: WEBP, Lossless: true}
 	runBenchmarkResize("test.jpg", options, b)
+}
+
+//func BenchmarkConvertToAvif(b *testing.B) {
+//	options := Options{Type: AVIF}
+//	runBenchmarkResize("test.avif", options, b)
+//}
+//
+//func BenchmarkConvertToHeif(b *testing.B) {
+//	options := Options{Type: HEIF}
+//	runBenchmarkResize("test.heif", options, b)
+//}
+
+func TestConvertToWebp(t *testing.T) {
+	options := Options{Type: WEBP, Quality: ConvertQuality}
+	doResize("test.jpg", options, ConvertNum)
+}
+
+func TestConvertToAvif(t *testing.T) {
+	options := Options{Type: AVIF, Quality: ConvertQuality, Speed: 4}
+	doResize("test.jpg", options, ConvertNum)
+}
+
+func TestConvertToHeif(t *testing.T) {
+	options := Options{Type: HEIF, Quality: ConvertQuality}
+	doResize("test.jpg", options, ConvertNum)
 }
 
 func BenchmarkCropJpeg(b *testing.B) {
